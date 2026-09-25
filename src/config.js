@@ -19,7 +19,7 @@ export const LANDMARK = {
 export const BANDS = [
   {
     id: 'A',
-    top: LANDMARK.INDEX_TIP,
+    top: LANDMARK.PINKY_TIP,
     bottom: LANDMARK.MIDDLE_TIP,
     shader: 'threshold',
     uniforms: {
@@ -32,7 +32,7 @@ export const BANDS = [
   {
     id: 'B',
     top: LANDMARK.MIDDLE_TIP,
-    bottom: LANDMARK.RING_TIP,
+    bottom: LANDMARK.INDEX_TIP,
     shader: 'posterize',
     uniforms: {
       colorDark: '#1f6b2e',
@@ -43,7 +43,7 @@ export const BANDS = [
   },
   {
     id: 'C',
-    top: LANDMARK.RING_TIP,
+    top: LANDMARK.INDEX_TIP,
     bottom: LANDMARK.THUMB_TIP,
     shader: 'halftone',
     uniforms: {

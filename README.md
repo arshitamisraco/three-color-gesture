@@ -22,6 +22,6 @@ pair, the fragment shader in `src/shaders/`, and its colours.
 
 | Band | Finger pair            | Look                                   |
 | ---- | ---------------------- | -------------------------------------- |
-| A    | index → middle tips    | blue / cream threshold + grainy dither |
-| B    | middle → ring tips     | green / yellow / cream posterize + RGB split |
-| C    | ring → thumb tips      | red dot halftone on white              |
+| A    | pinky → middle tips    | blue / cream threshold + grainy dither |
+| B    | middle → index tips    | green / yellow / cream posterize + RGB split |
+| C    | index → thumb tips     | red dot halftone on white              |
