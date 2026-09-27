@@ -1,5 +1,47 @@
 // Single source of truth for the finger-to-band mapping and look of each band.
 //
+// ---------------------------------------------------------------------------
+// TUNING — the knobs you'll most likely want to play with. Any of these can
+// also be overridden from the URL while the app is running, e.g.
+//   http://localhost:5173/?threshold=0.3&grain=0.5&dotScale=70
+// ---------------------------------------------------------------------------
+export const TUNING = withUrlOverrides({
+  // Band A (blue/cream): luminance cut between dark and light, 0..1.
+  // Lower = more of the frame goes cream; higher = more goes blue.
+  threshold: 0.35,
+  // Band A: grain/dither strength around that cut, 0..1.
+  grain: 0.35,
+  // Band B: RGB-split fringe width in UV units.
+  rgbSplit: 0.006,
+  // Band C: halftone dots across the viewport height.
+  dotScale: 90,
+  // Landmark smoothing, 0..1, applied every render frame. 0 = raw and
+  // twitchy, 0.9 = very floaty. Around 0.85 hides most tracking jitter.
+  smoothing: 0.85,
+  // How many detection frames a hand may go missing before the panels hide.
+  // Higher = fewer flickers when tracking briefly drops, but more lag on exit.
+  holdFrames: 12,
+  // Show thin white lines at the band boundaries.
+  edges: false,
+  // 'window'    = each band stylizes only the video directly behind it.
+  // 'projected' = the whole camera frame is squashed into each band.
+  panelMode: 'window',
+});
+
+function withUrlOverrides(obj) {
+  if (typeof location === 'undefined') return obj;
+  const params = new URLSearchParams(location.search);
+  for (const key of Object.keys(obj)) {
+    if (!params.has(key)) continue;
+    const raw = params.get(key);
+    const cur = obj[key];
+    obj[key] = typeof cur === 'number' ? Number(raw)
+      : typeof cur === 'boolean' ? raw !== 'false' && raw !== '0'
+      : raw;
+  }
+  return obj;
+}
+
 // MediaPipe hand landmark indices:
 //   0 wrist, 4 thumb tip, 8 index tip, 12 middle tip, 16 ring tip, 20 pinky tip
 export const LANDMARK = {
@@ -25,8 +67,8 @@ export const BANDS = [
     uniforms: {
       colorDark: '#1d4f91',
       colorLight: '#f4efe4',
-      threshold: 0.5,
-      grain: 0.35,
+      threshold: TUNING.threshold,
+      grain: TUNING.grain,
     },
   },
   {
@@ -38,7 +80,7 @@ export const BANDS = [
       colorDark: '#1f6b2e',
       colorMid: '#e8d63a',
       colorLight: '#f4efe4',
-      rgbSplit: 0.006,
+      rgbSplit: TUNING.rgbSplit,
     },
   },
   {
@@ -49,7 +91,7 @@ export const BANDS = [
     uniforms: {
       colorDot: '#d8322a',
       colorPaper: '#ffffff',
-      dotScale: 90.0,
+      dotScale: TUNING.dotScale,
     },
   },
 ];
@@ -57,14 +99,20 @@ export const BANDS = [
 // Thin white separator drawn along the shared edge between adjacent bands,
 // in normalized screen units (fraction of viewport height).
 export const EDGE = {
+  enabled: TUNING.edges,
   color: '#ffffff',
   thickness: 0.006,
 };
 
+export const PANEL = {
+  mode: TUNING.panelMode,
+};
+
 export const TRACKING = {
   numHands: 2,
-  // 0 = no smoothing, 1 = frozen. Applied per-landmark each frame.
-  smoothing: 0.65,
+  // 0 = no smoothing, 1 = frozen. Applied per-landmark every render frame.
+  smoothing: TUNING.smoothing,
+  holdFrames: TUNING.holdFrames,
   minHandDetectionConfidence: 0.5,
   minHandPresenceConfidence: 0.5,
   minTrackingConfidence: 0.5,

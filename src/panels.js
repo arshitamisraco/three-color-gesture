@@ -14,9 +14,24 @@ const SHADERS = {
 // fragment shader divides vUvq.xy by vUvq.z to undo the projective warp.
 const VERTEX_SHADER = /* glsl */ `
   attribute vec3 uvq;
+  uniform float uWindow;      // 1 = sample the video behind the quad (screen-space)
+  uniform float uMirror;
+  uniform vec2 uCoverScale;   // screen → video cover transform (see main.js)
+  uniform vec2 uCoverOffset;
   varying vec3 vUvq;
   void main() {
-    vUvq = uvq;
+    if (uWindow > 0.5) {
+      // Window mode: texcoord is a function of the vertex's screen position,
+      // so the band acts as a filter over whatever is behind it. The mapping
+      // is affine, so plain interpolation is exact (q = 1).
+      vec2 screen = position.xy;
+      if (uMirror > 0.5) screen.x = 1.0 - screen.x;
+      vec2 vid = screen * uCoverScale + uCoverOffset;
+      vUvq = vec3(vid.x, 1.0 - vid.y, 1.0);
+    } else {
+      // Projected mode: whole frame mapped onto the quad in perspective.
+      vUvq = uvq;
+    }
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -106,12 +121,16 @@ function setQuadUvq(geometry, baseUv, q) {
   attr.needsUpdate = true;
 }
 
-function buildBandMaterial(band, videoTexture) {
+function buildBandMaterial(band, videoTexture, mode) {
   const fragmentShader = SHADERS[band.shader];
   const uniforms = {
     uVideo: { value: videoTexture },
     uResolution: { value: new THREE.Vector2(1, 1) },
     uTime: { value: 0 },
+    uWindow: { value: mode === 'window' ? 1 : 0 },
+    uMirror: { value: 1 },
+    uCoverScale: { value: new THREE.Vector2(1, 1) },
+    uCoverOffset: { value: new THREE.Vector2(0, 0) },
   };
   const extra = band.uniforms || {};
   for (const key of Object.keys(extra)) {
@@ -145,13 +164,14 @@ function bandBaseUv(uvRect) {
   ];
 }
 
-export function createPanels({ scene, videoTexture, bands, edge }) {
+export function createPanels({ scene, videoTexture, bands, edge, mode = 'window' }) {
   let aspect = 1;
+  const edgesEnabled = edge.enabled !== false && edge.thickness > 0;
 
   // --- Band quads ------------------------------------------------------
   const bandMeshes = bands.map((band, i) => {
     const geometry = makeQuadGeometry();
-    const material = buildBandMaterial(band, videoTexture);
+    const material = buildBandMaterial(band, videoTexture, mode);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = i;
     mesh.visible = false;
@@ -229,13 +249,25 @@ export function createPanels({ scene, videoTexture, bands, edge }) {
 
     const visible = Array.isArray(screenHands) && screenHands.length >= 2;
     for (const mesh of bandMeshes) mesh.visible = visible;
-    for (const mesh of edgeMeshes) mesh.visible = visible;
+    for (const mesh of edgeMeshes) mesh.visible = visible && edgesEnabled;
     if (!visible) return;
 
     const [h0, h1] = screenHands;
     for (const mesh of bandMeshes) updateBand(mesh, h0, h1);
-    for (let i = 0; i < edgeMeshes.length; i++) {
-      updateEdge(edgeMeshes[i], edgeLandmarks[i], h0, h1);
+    if (edgesEnabled) {
+      for (let i = 0; i < edgeMeshes.length; i++) {
+        updateEdge(edgeMeshes[i], edgeLandmarks[i], h0, h1);
+      }
+    }
+  }
+
+  /** Screen→video cover transform + mirroring, shared with the background. */
+  function setView({ cover, mirrored }) {
+    for (const mesh of bandMeshes) {
+      const u = mesh.material.uniforms;
+      u.uCoverScale.value.set(cover.sx, cover.sy);
+      u.uCoverOffset.value.set(cover.ox, cover.oy);
+      u.uMirror.value = mirrored ? 1 : 0;
     }
   }
 
@@ -264,6 +296,7 @@ export function createPanels({ scene, videoTexture, bands, edge }) {
   return {
     update,
     resize,
+    setView,
     meshes: { bands: bandMeshes, edges: edgeMeshes },
     dispose,
   };

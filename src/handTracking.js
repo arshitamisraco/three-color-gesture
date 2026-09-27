@@ -31,8 +31,10 @@ export function createHandTracker({ video, config }) {
   let result = []; // last returned (smoothed) hands, cached between calls
 
   // Fixed-size slots (config.numHands) tracking identity across frames.
-  // Each slot is null (empty) or { landmarks, missing } where `missing` is
-  // the number of consecutive frames since it was last actually detected.
+  // Each slot is null (empty) or { target, landmarks, missing }: `target` is
+  // the latest raw detection, `landmarks` the smoothed pose that eases toward
+  // it every render frame, `missing` the number of consecutive detection
+  // frames since the hand was last actually seen.
   let slots = new Array(config.numHands).fill(null);
 
   async function init() {
@@ -120,25 +122,34 @@ export function createHandTracker({ video, config }) {
       if (ri === -1) {
         // Not seen this frame: hold over briefly to avoid flicker, else drop.
         if (slots[i] && slots[i].missing < holdFrames) {
-          nextSlots[i] = { landmarks: slots[i].landmarks, missing: slots[i].missing + 1 };
+          nextSlots[i] = { ...slots[i], missing: slots[i].missing + 1 };
         } else {
           nextSlots[i] = null;
         }
         continue;
       }
       const raw = rawHands[ri];
-      const landmarks = slots[i]
-        ? smoothLandmarks(slots[i].landmarks, raw, 1 - config.smoothing)
-        : raw; // first sighting of this slot: snap directly, no lerp
-      nextSlots[i] = { landmarks, missing: 0 };
+      // First sighting of this slot snaps directly; otherwise keep the
+      // smoothed pose and let settle() ease it toward the new target.
+      nextSlots[i] = { target: raw, landmarks: slots[i] ? slots[i].landmarks : raw, missing: 0 };
     }
     slots = nextSlots;
   }
 
-  function update(nowMs) {
-    if (!landmarker) return result;
+  // Ease every slot's smoothed pose toward its latest detection. Runs once
+  // per render frame (not just per detection frame) so motion stays fluid
+  // even when the camera/detector runs slower than the display.
+  function settle() {
+    const t = 1 - config.smoothing;
+    for (const slot of slots) {
+      if (slot) slot.landmarks = smoothLandmarks(slot.landmarks, slot.target, t);
+    }
+    result = slots.filter(Boolean).map((s) => s.landmarks);
+  }
+
+  function detect(nowMs) {
     // Avoid re-running detection on the same video frame.
-    if (video.currentTime === lastVideoTime) return result;
+    if (video.currentTime === lastVideoTime) return;
     lastVideoTime = video.currentTime;
 
     // MediaPipe requires strictly increasing timestamps per call.
@@ -153,14 +164,19 @@ export function createHandTracker({ video, config }) {
         console.warn('HandLandmarker.detectForVideo failed:', err);
         warned = true;
       }
-      return result;
+      return;
     }
 
     const rawHands = (detection.landmarks || []).map((lm) =>
       lm.map((p) => ({ x: p.x, y: p.y, z: p.z })),
     );
     assignSlots(rawHands);
-    result = slots.filter(Boolean).map((s) => s.landmarks);
+  }
+
+  function update(nowMs) {
+    if (!landmarker) return result;
+    detect(nowMs);
+    settle();
     return result;
   }
 

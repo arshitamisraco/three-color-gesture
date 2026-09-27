@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createHandTracker } from './handTracking.js';
 import { createPanels } from './panels.js';
-import { BANDS, EDGE, TRACKING, CAMERA } from './config.js';
+import { BANDS, EDGE, PANEL, TRACKING, CAMERA } from './config.js';
 
 // ---------------------------------------------------------------------------
 // Coordinate convention used across the app:
@@ -114,6 +114,7 @@ const panels = createPanels({
   videoTexture,
   bands: BANDS,
   edge: EDGE,
+  mode: PANEL.mode,
 });
 
 function onResize() {
@@ -122,6 +123,7 @@ function onResize() {
   bgMaterial.uniforms.uScale.value.set(cover.sx, cover.sy);
   bgMaterial.uniforms.uOffset.value.set(cover.ox, cover.oy);
   panels.resize(window.innerWidth, window.innerHeight);
+  panels.setView({ cover, mirrored: CAMERA.mirrored });
 }
 window.addEventListener('resize', onResize);
 
@@ -151,10 +153,11 @@ function fakeHands(t) {
   const mk = (cx, phase) => {
     const lm = Array.from({ length: 21 }, () => ({ x: cx, y: 0.5, z: 0 }));
     const sway = Math.sin(t * 0.8 + phase) * 0.04;
-    lm[8]  = { x: cx + sway, y: 0.22, z: 0 }; // index tip
-    lm[12] = { x: cx - sway, y: 0.38, z: 0 }; // middle tip
-    lm[16] = { x: cx + sway, y: 0.55, z: 0 }; // ring tip
-    lm[4]  = { x: cx - sway * 1.5, y: 0.78, z: 0 }; // thumb tip
+    lm[20] = { x: cx + sway, y: 0.18, z: 0 }; // pinky tip
+    lm[16] = { x: cx - sway, y: 0.30, z: 0 }; // ring tip
+    lm[12] = { x: cx - sway, y: 0.40, z: 0 }; // middle tip
+    lm[8]  = { x: cx + sway, y: 0.56, z: 0 }; // index tip
+    lm[4]  = { x: cx - sway * 1.5, y: 0.80, z: 0 }; // thumb tip
     return lm;
   };
   return [mk(0.22, 0), mk(0.78, 1.7)];
